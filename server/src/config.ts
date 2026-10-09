@@ -6,7 +6,7 @@ fs.mkdirSync(mediaDir, { recursive: true })
 export const MEDIA_DIR = fs.realpathSync(mediaDir)
 export const DATA_DIR = path.resolve(process.env.DATA_DIR ?? './data')
 export const PORT = Number(process.env.PORT ?? 8080)
-export const WEB_DIR = path.resolve(process.env.WEB_DIR ?? '../web/dist')
+export const WEB_DIR = path.resolve(process.env.WEB_DIR ?? path.join(import.meta.dirname, '../../web/dist'))
 
 export const AUDIO_EXT = new Set(['mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'flac', 'wav'])
 export const VIDEO_EXT = new Set(['mp4', 'm4v', 'webm', 'ogv', 'mkv'])

@@ -11,6 +11,7 @@ import { scan } from '../src/scanner.js'
 let root: string
 const db = openDb(':memory:')
 let app: ReturnType<typeof buildApp>
+let cookie = ''
 
 function ffmpeg(out: string, args: string[]) {
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', ...args, out])
@@ -30,16 +31,21 @@ before(async () => {
   fs.symlinkSync(path.join(tmp, 'outside'), path.join(root, 'evil'))
   app = buildApp(db, { root, webDir: '/nonexistent' })
   await scan(db, root)
+  const r = await app.inject({ method: 'POST', url: '/api/auth/setup', payload: { username: 'admin', password: 'password123' } })
+  cookie = String(r.headers['set-cookie']).split(';')[0]
 })
+
+const get = (url: string, extra: Record<string, string> = {}) =>
+  app.inject({ url, headers: { cookie, ...extra } })
 after(() => app.close())
 
 test('escaneo indexa carpetas, metadatos y omite symlinks externos / otros ficheros', async () => {
-  const res = await app.inject('/api/folders')
+  const res = await get('/api/folders')
   const root_ = res.json()
   assert.deepEqual(root_.folders.map((f: any) => f.name), ['Rock'])
   assert.deepEqual(root_.media.map((m: any) => m.filename), ['b.mp4'])
   assert.equal(root_.media[0].kind, 'video')
-  const rock = (await app.inject('/api/folders/by-path?p=Rock')).json()
+  const rock = (await get('/api/folders/by-path?p=Rock')).json()
   assert.equal(rock.media[0].title, 'Canción A')
   assert.equal(rock.media[0].artist, 'Banda')
   assert.ok(rock.media[0].duration_ms > 800)
@@ -47,24 +53,24 @@ test('escaneo indexa carpetas, metadatos y omite symlinks externos / otros fiche
 })
 
 test('stream con Range', async () => {
-  const rock = (await app.inject('/api/folders/by-path?p=Rock')).json()
+  const rock = (await get('/api/folders/by-path?p=Rock')).json()
   const id = rock.media[0].id
   const size = fs.statSync(path.join(root, 'Rock', 'a.mp3')).size
-  const full = await app.inject(`/api/media/${id}/stream`)
+  const full = await get(`/api/media/${id}/stream`)
   assert.equal(full.statusCode, 200)
   assert.equal(full.headers['accept-ranges'], 'bytes')
   assert.equal(full.rawPayload.length, size)
-  const part = await app.inject({ url: `/api/media/${id}/stream`, headers: { range: 'bytes=10-19' } })
+  const part = await get(`/api/media/${id}/stream`, { range: 'bytes=10-19' })
   assert.equal(part.statusCode, 206)
   assert.equal(part.headers['content-range'], `bytes 10-19/${size}`)
   assert.deepEqual(part.rawPayload, full.rawPayload.subarray(10, 20))
-  const bad = await app.inject({ url: `/api/media/${id}/stream`, headers: { range: `bytes=${size + 5}-` } })
+  const bad = await get(`/api/media/${id}/stream`, { range: `bytes=${size + 5}-` })
   assert.equal(bad.statusCode, 416)
 })
 
 test('path traversal rechazado', async () => {
   for (const p of ['../outside', '..%2Foutside', 'evil', 'Rock/../../outside']) {
-    const r = await app.inject(`/api/folders/by-path?p=${p}`)
+    const r = await get(`/api/folders/by-path?p=${p}`)
     assert.ok(r.statusCode >= 400 && r.statusCode < 500, `${p} -> ${r.statusCode}`)
   }
 })
@@ -75,7 +81,7 @@ test('reescaneo incremental refleja altas y bajas sin duplicar', async () => {
   await scan(db, root)
   await scan(db, root)
   assert.equal((db.prepare('SELECT COUNT(*) n FROM media').get() as any).n, 2)
-  const rock = (await app.inject('/api/folders/by-path?p=Rock')).json()
+  const rock = (await get('/api/folders/by-path?p=Rock')).json()
   assert.deepEqual(rock.media.map((m: any) => m.filename).sort(), ['a.mp3', 'c.mp3'])
-  assert.equal((await app.inject('/api/folders')).json().media.length, 0)
+  assert.equal((await get('/api/folders')).json().media.length, 0)
 })

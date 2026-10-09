@@ -6,6 +6,9 @@ services:
     restart: unless-stopped
     ports:
       - "${PORT:-8080}:8080"
+    environment:
+      WATCH_POLLING: ${WATCH_POLLING:-0}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
     volumes:
       # Host folder with your media, mounted read-only
       - ${MEDIA_PATH:-./media}:/media:ro

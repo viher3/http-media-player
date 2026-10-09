@@ -1,8 +1,10 @@
 import fs from 'node:fs'
+import { EventEmitter } from 'node:events'
 import path from 'node:path'
 import { parseFile } from 'music-metadata'
 import type { Db } from './db.js'
 import { AUDIO_EXT, MEDIA_DIR, MIME, VIDEO_EXT } from './config.js'
+import { categorize } from './categorize.js'
 
 export type ScanStatus = {
   running: boolean
@@ -15,6 +17,14 @@ export type ScanStatus = {
 
 export const scanStatus: ScanStatus = {
   running: false, processed: 0, total: 0, errors: 0, startedAt: null, finishedAt: null,
+}
+
+/** Eventos: 'progress' (throttled) y 'done'. Los consume el canal SSE. */
+export const scanEvents = new EventEmitter()
+let lastEmit = 0
+const emitProgress = (force = false) => {
+  const now = Date.now()
+  if (force || now - lastEmit > 300) { lastEmit = now; scanEvents.emit('progress', { ...scanStatus }) }
 }
 
 type Found = { rel: string; abs: string; size: number; mtime: number; ext: string }
@@ -64,21 +74,23 @@ const num = (n: number | null | undefined) => (typeof n === 'number' && n > 0 ? 
 
 async function readTags(f: Found) {
   const base = path.basename(f.rel, path.extname(f.rel))
+  // "01 - Título", "01. Título", "1-03 Título" cuando no hay etiqueta de título
+  const numbered = /^(\d{1,3})\s*[-._)]\s*(.+)$/.exec(base)
   const out = {
-    duration_ms: null as number | null, title: base, artist: null as string | null,
+    duration_ms: null as number | null, title: numbered ? numbered[2].trim() : base, artist: null as string | null,
     album_artist: null as string | null, album: null as string | null,
-    track_no: null as number | null, disc_no: null as number | null,
+    track_no: (numbered ? Number(numbered[1]) : null) as number | null, disc_no: null as number | null,
     year: null as number | null, genre: null as string | null, has_cover: 0,
   }
   try {
     const m = await parseFile(f.abs, { duration: true, skipCovers: false })
     const c = m.common
     out.duration_ms = m.format.duration ? Math.round(m.format.duration * 1000) : null
-    out.title = c.title?.trim() || base
+    out.title = c.title?.trim() || out.title
     out.artist = c.artist?.trim() || null
     out.album_artist = c.albumartist?.trim() || null
     out.album = c.album?.trim() || null
-    out.track_no = num(c.track.no)
+    out.track_no = num(c.track.no) ?? out.track_no
     out.disc_no = num(c.disk.no)
     out.year = num(c.year)
     out.genre = c.genre?.[0] ?? null
@@ -103,6 +115,7 @@ async function run(db: Db, root: string) {
   Object.assign(scanStatus, {
     running: true, processed: 0, total: 0, errors: 0, startedAt: Date.now(), finishedAt: null,
   })
+  emitProgress(true)
   try {
     const dirs = new Set<string>()
     const files: Found[] = []
@@ -158,13 +171,18 @@ async function run(db: Db, root: string) {
         })
       }
       scanStatus.processed++
+      emitProgress()
     }
     const delMedia = db.prepare('DELETE FROM media WHERE id = ?')
     db.transaction(() => {
       for (const [p, r] of existing) if (!seen.has(p)) delMedia.run(r.id)
     })()
+
+    categorize(db, root)
   } finally {
     scanStatus.running = false
     scanStatus.finishedAt = Date.now()
+    emitProgress(true)
+    scanEvents.emit('done', { ...scanStatus })
   }
 }
