@@ -25,3 +25,13 @@ Environment variables: `MEDIA_DIR` (default `./media`), `DATA_DIR` (default `./d
 MEDIA_PATH=/path/to/media docker compose up -d --build   # http://localhost:8080
 ```
 `MEDIA_PATH` defaults to `./media` and `PORT` to `8080`; both can also go in a `.env` file (`cp .env.dist .env`).
+
+## Tech stack
+- **Backend:** Node.js, TypeScript, [Fastify](https://fastify.dev) (with `@fastify/static` to serve the SPA)
+- **Metadata:** [music-metadata](https://github.com/Borewit/music-metadata) (ID3, Vorbis, MP4 tags, duration, embedded covers)
+- **Frontend:** React, Vite, React Router, Zustand; a single persistent HTML5 `<video>` element plays both audio and video
+- **Tests:** Node's built-in test runner via `tsx`
+- **Packaging:** npm workspaces (`server`, `web`), Docker / Docker Compose
+
+## Database
+[SQLite](https://www.sqlite.org) through [better-sqlite3](https://github.com/WiseLibs/better-sqlite3), stored in `DATA_DIR/library.db` (`/data` in Docker, persisted in the `media-player-data` volume). It holds the library index (`folders` and `media` tables); the media files themselves are never modified.
