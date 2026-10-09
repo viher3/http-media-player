@@ -1,0 +1,16 @@
+services:
+  media-player:
+    build: .
+    image: http-media-player
+    container_name: http-media-player
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      # Host folder with your media, mounted read-only
+      - ${MEDIA_PATH:-./media}:/media:ro
+      # Persistent index (SQLite)
+      - media-player-data:/data
+
+volumes:
+  media-player-data:
