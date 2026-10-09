@@ -1,21 +1,21 @@
 # HTTP Media Player
 
-Reproductor web autoalojado para una carpeta de audio/vídeo. Ver [SPEC.md](SPEC.md).
+Self-hosted web player for a folder of audio and video files. See [SPEC.md](SPEC.md).
 
-## Desarrollo
+## Development
 ```bash
 npm install
-MEDIA_DIR=/ruta/a/medios npm run dev:server   # API en :8080
-npm run dev:web                               # SPA en :5173 (proxy a :8080)
+MEDIA_DIR=/path/to/media npm run dev:server   # API on :8080
+npm run dev:web                               # SPA on :5173 (proxies to :8080)
 npm test
 ```
 
-## Producción
+## Production
 ```bash
-npm run build && MEDIA_DIR=/ruta/a/medios npm start
-# o con Docker:
+npm run build && MEDIA_DIR=/path/to/media npm start
+# or with Docker:
 docker build -t http-media-player .
-docker run -p 8080:8080 -v /ruta/a/medios:/media:ro -v mp-data:/data http-media-player
+docker run -p 8080:8080 -v /path/to/media:/media:ro -v mp-data:/data http-media-player
 ```
 
-Variables: `MEDIA_DIR` (def. `./media`), `DATA_DIR` (def. `./data`), `PORT` (def. 8080), `WEB_DIR`.
+Environment variables: `MEDIA_DIR` (default `./media`), `DATA_DIR` (default `./data`), `PORT` (default 8080), `WEB_DIR`.
